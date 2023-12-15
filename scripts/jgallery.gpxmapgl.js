@@ -1,18 +1,57 @@
+class RulerControl {
+	onAdd(map){
+		this.map = map;
+		this.enabled = false;
+		this.container = document.createElement('div');
+		this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group mapbox-control ruler-custom-control';
+		this.container.innerHTML = '<div class="tools-box">' +
+			'<button>' +
+			'<span class="mapboxgl-ctrl-icon" style="font-size: 19px;font-weight:bold;padding: 2px 0 0 0;" aria-hidden="true">â†¦</span>' +
+			'</button>' +
+			'</div>';
+		this.container.addEventListener('click', function() {
+			if(!this.enabled) {
+				this.enabled = true;
+				GpxMapGlPlugin.startMeasure();
+			} else {
+				this.enabled = false;
+				GpxMapGlPlugin.stopMeasure();
+			}
+		});
+		return this.container;
+	}
+	onRemove(){
+		this.container.parentNode.removeChild(this.container);
+		this.map = undefined;
+	}
+}
+
+
 var GpxMapGlPlugin = {
 	map:null,
+	globalGeoJson: {},
 	uid:0,
 	//palette: [ 0, "#57bb8a", 15, "#63b682", 30, "#73b87e", 45, "#84bb7b", 60, "#94bd77", 75, "#a4c073", 90, "#b0be6e", 105, "#c4c56d", 120, "#d4c86a", 135, "#e2c965", 150, "#f5ce62", 165, "#e9b861", 180, "#e6ad61", 195, "#ecac67", 210, "#e9a268", 225, "#e79a69", 240, "#e5926b", 255, "#e2886c", 270, "#e0816d", 285, "#dd776e" ],
 	palette: [ 0, "#8CD47E", 60, "#8CD47E", 61, "#7ABD7E", 90, "#7ABD7E", 91, "#f8d66d", 120, "#f8d66d", 121, "#ffb54c", 150, "#ffb54c", 151, "#FF6961" ],
+	sourceLoadingCallback:null,
+	sourceId:null,
 
 	handle:function(action) {
-		var sourceLoadingCallback = null;
-		var sourceId = null;
 
 		document.title = 'Photos :: Iso Map';
 
 		/* Reinitialize variables */
 		GpxMapGlPlugin.map = undefined;
-		GpxMapGlPlugin.knownSources = [];
+		GpxMapGlPlugin.sourceLoadingCallback = null;
+		GpxMapGlPlugin.sourceId = null;
+		GpxMapGlPlugin.globalGeoJson = {
+			"type": "geojson",
+			// "tolerance": 3, // no need to simplify
+			"data": {
+				"type": "FeatureCollection",
+				"features": []
+			}
+		};
 
 		/* Remove theme, show map */
 		$('#header').animate({opacity:0}, 'fast');
@@ -22,20 +61,22 @@ var GpxMapGlPlugin = {
 		/* Create the map */
 		GpxMapGlPlugin.map = new mapboxgl.Map({
 			container: 'map_canvas_gpxmapgl', // container ID
-			style: 'mapbox://styles/mapbox/light-v11', // style URL
+			//style: 'mapbox://styles/mapbox/light-v11', // style URL
+			//style: 'mapbox://styles/joeppmmmmm/clj6udapr004u01p91x6h1h54', // style URL
+			style: 'mapbox://styles/joeppmmmmm/clj765p39006401p99nhhe55j', // style URL
 			center: [8.28, 47.38], // starting position [lng, lat]
 			zoom: 5, // starting zoom
-			projection: {
+			/*projection: {
 				name: 'equalEarth'
-			}
+				}*/
 		});
 
 		/* Add the callback mechanism to load data */
 		GpxMapGlPlugin.map.on('sourcedata', function(e) {
-			if (GpxMapGlPlugin.map.getSource(sourceId) && GpxMapGlPlugin.map.isSourceLoaded(sourceId)) {
-				if(sourceLoadingCallback) {
-					var tmp = sourceLoadingCallback;
-					sourceLoadingCallback = null;
+			if (GpxMapGlPlugin.map.getSource(GpxMapGlPlugin.sourceId) && GpxMapGlPlugin.map.isSourceLoaded(GpxMapGlPlugin.sourceId)) {
+				if(GpxMapGlPlugin.sourceLoadingCallback) {
+					var tmp = GpxMapGlPlugin.sourceLoadingCallback;
+					GpxMapGlPlugin.sourceLoadingCallback = null;
 					tmp();
 				}
 			}
@@ -43,42 +84,56 @@ var GpxMapGlPlugin = {
 
 		/* When the map is done loading, load the tileset */
 		GpxMapGlPlugin.map.on('load', () => {
-			sourceId = config.gpxmapgl_tileset+'-rails';
-			sourceLoadingCallback = function() { // when the tileset is loaded, display it!
-				GpxMapGlPlugin.map.addLayer({
-					'id': sourceId,
-					'type': 'line',
-					'source': sourceId,
-					'source-layer': sourceId.replace(/.*?\./, ''),
-					'layout': {
-						'line-join': 'round',
-						'line-cap': 'round'
-					},
-					//"filter": ["<=", ["get", "dur"], 0],
-					"paint": {
-						"line-color": [
-							"interpolate",
-							["linear"],
-							["get", "dur"],
-							...GpxMapGlPlugin.palette
-						],
-						"line-width": [
-							"interpolate",
-							["linear"],
-							["get", "dur"],
-							3, 5,
-							180.5,	3,
-							210, 2,
-							806, 1
-						]
-					}
-				}, 'road-label-simple');
+			/*GpxMapGlPlugin.map.addSource('mapbox-dem', {
+				'type': 'raster-dem',
+				'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+				'tileSize': 512,
+				'maxzoom': 14
+				});
+				// add the DEM source as a terrain layer with exaggerated height
+				GpxMapGlPlugin.map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });*/
+
+				GpxMapGlPlugin.map.addControl(new RulerControl(),'top-left')
+				GpxMapGlPlugin.map.addControl(new mapboxgl.ScaleControl());
+
 				GpxMapGlPlugin.show('');
-			};
-			GpxMapGlPlugin.map.addSource(sourceId, {
+
+				/*GpxMapGlPlugin.sourceId = config.gpxmapgl_tileset+'-rails';
+				GpxMapGlPlugin.sourceLoadingCallback = function() { // when the tileset is loaded, display it!
+				GpxMapGlPlugin.map.addLayer({
+				'id': GpxMapGlPlugin.sourceId,
+				'type': 'line',
+				'source': GpxMapGlPlugin.sourceId,
+				'source-layer': GpxMapGlPlugin.sourceId.replace(/.*?\./, ''),
+				'layout': {
+				'line-join': 'round',
+				'line-cap': 'round'
+				},
+				//"filter": ["<=", ["get", "dur"], 0],
+				"paint": {
+				"line-color": [
+				"interpolate",
+				["linear"],
+				["get", "dur"],
+				...GpxMapGlPlugin.palette
+				],
+				"line-width": [
+				"interpolate",
+				["linear"],
+				["get", "dur"],
+				3, 5,
+				180.5,	3,
+				210, 2,
+				806, 1
+				]
+				}
+				}, 'road-label-sm');
+				GpxMapGlPlugin.addStations();
+				};
+				GpxMapGlPlugin.map.addSource(GpxMapGlPlugin.sourceId, {
 				type: 'vector',
-				url: 'mapbox://'+sourceId // load the tileset
-			});
+				url: 'mapbox://'+GpxMapGlPlugin.sourceId // load the tileset
+				});*/
 		});
 
 		$('#content').animate({opacity:1}, "fast");
@@ -91,8 +146,63 @@ var GpxMapGlPlugin = {
 
 	},
 
+	addStations:function() {
+		GpxMapGlPlugin.sourceId = config.gpxmapgl_tileset+'-stations';
+		GpxMapGlPlugin.sourceLoadingCallback = function() {
+			GpxMapGlPlugin.map.addLayer({
+				"id": GpxMapGlPlugin.sourceId,
+				"type": "circle",
+				"source": GpxMapGlPlugin.sourceId,
+				"source-layer": GpxMapGlPlugin.sourceId.replace(/.*?\./, ''),
+				"layout": {},
+				"paint": {
+					"circle-radius": [
+						"interpolate",
+						["linear"],
+						["zoom"],
+						0, 3,
+						9.63, 3,
+						11.3, 3,
+						22, 3
+					],
+					"circle-opacity": [
+						"interpolate",
+						["linear"],
+						["zoom"],
+						0, 0,
+						7.29, 0,
+						8.57, 0.3,
+						10, 0.99,
+						22, 0.99
+					],
+					"circle-color": [
+						"interpolate",
+						["linear"],
+						["get", "dur"],
+						...GpxMapGlPlugin.palette
+					],
+					"circle-stroke-opacity": [
+						"interpolate",
+						["linear"],
+						["zoom"],
+						0, 0,
+						9.5, 0,
+						10, 0.5,
+						22, 1
+					],
+					"circle-stroke-width": 1
+				}
+			}, 'road-label-sm');
+			GpxMapGlPlugin.show('');
+		};
+		GpxMapGlPlugin.map.addSource(GpxMapGlPlugin.sourceId, {
+			type: 'vector',
+			url: 'mapbox://'+GpxMapGlPlugin.sourceId
+		});
+	},
+
 	/* When we exit the map view we need to do some cleaning,
-	 * so use a helper instead of jGallery.switchPage */
+	* so use a helper instead of jGallery.switchPage */
 	leaveMap:function(action) {
 		$('#header').css('opacity', 1);
 		$('#map_canvas_gpxmapgl').remove();
@@ -144,7 +254,7 @@ var GpxMapGlPlugin = {
 
 
 	/* Recursively show gpx in directories.
-	 * The thumbnail of a directory is stored in the parent dir json, so propagate that */
+	* The thumbnail of a directory is stored in the parent dir json, so propagate that */
 	show:function(dir) {
 		// We want to prioritize loading of GPX, so queue dir parsing
 		var json = GpxMapGlPlugin.ajaxQueue(dir, function() { GpxMapGlPlugin.show(dir); });
@@ -176,7 +286,7 @@ var GpxMapGlPlugin = {
 						GpxMapGlPlugin.priorityCalls--;
 						GpxMapGlPlugin.ajaxRelaunch();
 						for(var s = 0; s < json.points.length; s++) {
-							GpxMapGlPlugin.showTrack(json.points[s], GpxMapGlPlugin.uid++);
+							GpxMapGlPlugin.addTrack(json.points[s], GpxMapGlPlugin.uid++);
 						}
 					},
 					error:function(e, f) {
@@ -195,7 +305,7 @@ var GpxMapGlPlugin = {
 		}
 	},
 
-	showTrack: function(gpx, id) {
+	addTrack: function(gpx, id) {
 		if(!gpx)
 			return;
 
@@ -204,32 +314,146 @@ var GpxMapGlPlugin = {
 			coordinates.push([parseFloat(gpx[i][1]), parseFloat(gpx[i][0])]); // for some reason lat/lon are inverted in the json...
 		}
 		var geojson = {
-			"type": "geojson",
-			"data": {
-				"type": "FeatureCollection",
-				"features": [{
-					"type": "Feature",
-					"geometry": {
-						"type": "LineString",
-						"coordinates": coordinates
-					}
-				}]
+			"type": "Feature",
+			"geometry": {
+				"type": "LineString",
+				"coordinates": coordinates
 			}
 		};
-		GpxMapGlPlugin.map.addSource("route"+id, geojson);
+		GpxMapGlPlugin.globalGeoJson.data.features.push(geojson);
+		GpxMapGlPlugin.displayTracks();
+	},
 
-		GpxMapGlPlugin.map.addLayer({
-			"id": "route"+id,
-			"type": "line",
-			"source": "route"+id,
-			"layout": {
-				"line-join": "round",
-				"line-cap": "round"
-			},
-			"paint": {
-				"line-color": "blue",
-				"line-width": 2
-			}
-		}, 'road-label-simple');
+	displayTracks: function() {
+		if(!GpxMapGlPlugin.map.getSource("route")) {
+			GpxMapGlPlugin.map.addSource("route", GpxMapGlPlugin.globalGeoJson);
+
+			GpxMapGlPlugin.map.addLayer({
+				"id": "route",
+				"type": "line",
+				"source": "route",
+				"layout": {
+					"line-join": "round",
+					"line-cap": "round"
+				},
+				"paint": {
+					"line-color": "#FF10F0",
+					"line-width": 2
+				}
+			}, 'road-label-sm');
+		} else {
+			GpxMapGlPlugin.map.getSource("route").setData(GpxMapGlPlugin.globalGeoJson.data);
+		}
+	},
+
+	startMeasure: function() {
+		$script("https://unpkg.com/@turf/turf@6/turf.min.js", "turf", function(){
+			$("body").append('<div id="distance" style="position: absolute; top: 10px; left: 10px; z-index: 1; background-color: rgba(0, 0, 0, 0.5); color: #fff; font-size: 11px; line-height: 18px; display: block; margin: 0; padding: 5px 10px; border-radius: 3px;"></div>');
+
+			const distanceContainer = document.getElementById('distance');
+
+			const geojson = {
+				'type': 'FeatureCollection',
+				'features': []
+			};
+
+			// Used to draw a line between points
+			const linestring = {
+				'type': 'Feature',
+				'geometry': {
+					'type': 'LineString',
+					'coordinates': []
+				}
+			};
+
+			GpxMapGlPlugin.map.addSource('geojson', {
+				'type': 'geojson',
+				'data': geojson
+			});
+
+			// Add styles to the map
+			GpxMapGlPlugin.map.addLayer({
+				id: 'measure-points',
+				type: 'circle',
+				source: 'geojson',
+				paint: {
+					'circle-radius': 5,
+					'circle-color': '#000'
+				},
+				filter: ['in', '$type', 'Point']
+			});
+			GpxMapGlPlugin.map.addLayer({
+				id: 'measure-lines',
+				type: 'line',
+				source: 'geojson',
+				layout: {
+					'line-cap': 'round',
+					'line-join': 'round'
+				},
+				paint: {
+					'line-color': '#000',
+					'line-width': 2.5
+				},
+				filter: ['in', '$type', 'LineString']
+			});
+
+			GpxMapGlPlugin.map.on('click', (e) => {
+				const features = GpxMapGlPlugin.map.queryRenderedFeatures(e.point, {
+					layers: ['measure-points']
+				});
+
+				// Remove the linestring from the group
+				// so we can redraw it based on the points collection.
+				if (geojson.features.length > 1) geojson.features.pop();
+
+				// Clear the distance container to populate it with a new value.
+				distanceContainer.innerHTML = '';
+
+				// If a feature was clicked, remove it from the map.
+				if (features.length) {
+					const id = features[0].properties.id;
+					geojson.features = geojson.features.filter(
+						(point) => point.properties.id !== id
+					);
+				} else {
+					const point = {
+						'type': 'Feature',
+						'geometry': {
+							'type': 'Point',
+							'coordinates': [e.lngLat.lng, e.lngLat.lat]
+						},
+						'properties': {
+							'id': String(new Date().getTime())
+						}
+					};
+
+					geojson.features.push(point);
+				}
+
+				if (geojson.features.length > 1) {
+					linestring.geometry.coordinates = geojson.features.map(
+						(point) => point.geometry.coordinates
+					);
+
+					geojson.features.push(linestring);
+
+					// Populate the distanceContainer with total distance
+					const value = document.createElement('pre');
+					const distance = turf.length(linestring);
+					value.textContent = `Total distance: ${distance.toLocaleString()}km`;
+					distanceContainer.appendChild(value);
+				}
+
+				GpxMapGlPlugin.map.getSource('geojson').setData(geojson);
+			});
+
+		});
+	},
+
+	stopMeasure: function() {
+		$("#distance").remove();
+		GpxMapGlPlugin.map.removeLayer("measure-points");
+		GpxMapGlPlugin.map.removeLayer("measure-lines");
+		GpxMapGlPlugin.map.removeSource("geojson");
 	},
 };

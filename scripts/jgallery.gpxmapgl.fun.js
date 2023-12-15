@@ -47,3 +47,4 @@ function gpxMapGlChangeLang() {
 		config.tr = $.extend(config.tr, tr);
 	}
 }
+
